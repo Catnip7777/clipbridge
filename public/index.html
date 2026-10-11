@@ -1,0 +1,911 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>ClipBridge · 手机电脑剪贴桥</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --text: #14161a;
+    --muted: #6b7280;
+    --line: #e3e6ea;
+    --accent: #2563eb;
+    --accent-ink: #ffffff;
+    --ok: #16a34a;
+    --err: #dc2626;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .06);
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --card: #171a20;
+      --text: #e8eaee;
+      --muted: #9aa1ac;
+      --line: #2a2f38;
+      --accent: #4f83ff;
+      --accent-ink: #0b0d11;
+      --ok: #34d399;
+      --err: #f87171;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .35);
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    display: flex; flex-direction: column; min-height: 100vh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    background: var(--card); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 5;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  header .grow { flex: 1; }
+  .status {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted);
+    padding: 4px 9px; border: 1px solid var(--line); border-radius: 999px; white-space: nowrap;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+  .dot.off { background: var(--err); }
+  .iconbtn {
+    border: 1px solid var(--line); background: transparent; color: var(--text);
+    border-radius: 10px; height: 34px; min-width: 34px; padding: 0 10px;
+    font-size: 13px; cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .iconbtn:active { transform: scale(.97); }
+  .iconbtn[disabled] { opacity: .45; cursor: default; }
+  main { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 12px; max-width: 900px; width: 100%; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .editor { display: flex; flex-direction: column; overflow: hidden; }
+  .bar {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); flex-wrap: wrap;
+  }
+  .bar.bottom { border-top: 1px solid var(--line); border-bottom: 0; }
+  .bar .grow { flex: 1; }
+  .bar .swtext { font-size: 12px; color: var(--muted); }
+  textarea {
+    resize: vertical; border: 0; outline: none; background: transparent; color: var(--text);
+    padding: 12px; font: 15px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, "PingFang SC", monospace;
+    min-height: 130px; width: 100%;
+  }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button.big {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    min-height: 62px; border-radius: var(--radius); border: 1px solid var(--line);
+    background: var(--card); color: var(--text); font-size: 15px; font-weight: 600;
+    cursor: pointer; box-shadow: var(--shadow); padding: 8px 6px;
+  }
+  button.big small { font-weight: 400; font-size: 11px; color: var(--muted); }
+  button.big:active { transform: scale(.98); }
+  button.big.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  button.big.primary small { color: color-mix(in srgb, var(--accent-ink) 75%, transparent); }
+  .row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .row label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .switch { position: relative; width: 40px; height: 23px; flex: none; }
+  .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .18s; pointer-events: none; }
+  .switch span::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 19px; height: 19px;
+    border-radius: 50%; background: #fff; transition: transform .18s; box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { transform: translateX(17px); }
+  .banner {
+    display: none; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 12%, var(--card));
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    font-size: 13px;
+  }
+  .banner.show { display: flex; }
+  .banner button {
+    margin-left: auto; border: 0; background: var(--accent); color: var(--accent-ink);
+    border-radius: 9px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+
+  /* 图片区：缩略图网格（只用来预览图片） */
+  .grid {
+    display: grid; gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  }
+  .thumb {
+    position: relative; padding: 0; overflow: hidden; border-radius: 12px;
+    aspect-ratio: 1 / 1; cursor: pointer; background: color-mix(in srgb, var(--line) 45%, transparent);
+    border: 1px solid var(--line); box-shadow: var(--shadow);
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* 缩略图上的文件名 + 大小：平时淡显，悬停/触摸时更清楚 */
+  .thumb .overlay {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 6px 5px;
+    display: flex; align-items: baseline; gap: 4px;
+    color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, .7));
+    opacity: .8; transition: opacity .15s;
+  }
+  .thumb .overlay .fname {
+    flex: 1; min-width: 0; font-size: 10.5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .thumb .overlay .fsize { font-size: 9.5px; opacity: .85; flex: none; }
+  .thumb .act {
+    position: absolute; top: 4px; width: 26px; height: 26px; border-radius: 8px;
+    border: 0; background: rgba(0, 0, 0, .5); color: #fff; font-size: 13px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity .15s; text-decoration: none;
+  }
+  .thumb .act.dl { right: 34px; }
+  .thumb .act.rm { right: 4px; }
+  .thumb:hover .act, .thumb:focus-within .act { opacity: 1; }
+  .thumb:hover .overlay, .thumb:focus-within .overlay { opacity: 1; }
+  @media (hover: none) {
+    .thumb .act { opacity: .92; }
+    .thumb .overlay { opacity: 1; }
+  }
+  .thumb .act.dl:hover { background: var(--accent); }
+  .thumb .act.rm:hover { background: rgba(220, 38, 38, .85); }
+
+  /* 文件区：一行一个，带类型图标、大小、下载 / 删除 */
+  .filelist { display: flex; flex-direction: column; gap: 6px; }
+  .filerow {
+    display: flex; align-items: center; gap: 9px; padding: 7px 9px;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: color-mix(in srgb, var(--line) 22%, transparent);
+  }
+  .filerow .ficon {
+    flex: none; width: 34px; height: 34px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9.5px; font-weight: 700; letter-spacing: .3px;
+    background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent);
+    text-transform: uppercase; overflow: hidden;
+  }
+  .filerow .fmeta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .filerow .fname2 { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .filerow .fsub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .filerow .fbtns { display: flex; gap: 6px; flex: none; }
+  .filerow .fbtns a, .filerow .fbtns button {
+    border: 1px solid var(--line); background: transparent; color: var(--text);
+    border-radius: 8px; padding: 5px 9px; font-size: 12px; cursor: pointer; text-decoration: none;
+  }
+  .filerow .fbtns a:hover { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .filerow .fbtns button:hover { background: rgba(220, 38, 38, .85); color: #fff; border-color: transparent; }
+  .pathsline { font-size: 11.5px; color: var(--muted); word-break: break-all;
+    font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .emptyhint { font-size: 12px; color: var(--muted); }
+  .toast {
+    position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom));
+    transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+    background: #14161a; color: #fff; padding: 10px 16px; border-radius: 999px;
+    font-size: 13px; max-width: 88vw; text-align: center; transition: opacity .2s, transform .2s;
+    z-index: 20; box-shadow: 0 8px 24px rgba(0,0,0,.3);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  dialog {
+    border: 1px solid var(--line); border-radius: var(--radius); background: var(--card);
+    color: var(--text); padding: 18px; max-width: min(340px, 90vw); box-shadow: var(--shadow);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog img { width: 100%; height: auto; image-rendering: pixelated; border-radius: 8px; background: #fff; padding: 6px; }
+  dialog p { font-size: 13px; color: var(--muted); word-break: break-all; margin: 10px 0 0; }
+  dialog .close { width: 100%; margin-top: 12px; }
+  #viewDialog { max-width: min(760px, 94vw); padding: 12px; }
+  #viewDialog img { max-height: 72vh; object-fit: contain; image-rendering: auto; background: transparent; padding: 0; }
+  .viewbar { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+  .filebtn { position: relative; overflow: hidden; }
+  .filebtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .drop { border: 1.5px dashed transparent; }
+  .drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
+  footer { padding: 4px 14px 14px; text-align: center; font-size: 11px; color: var(--muted); }
+  @media (min-width: 720px) {
+    textarea { min-height: 220px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>ClipBridge</h1>
+  <span class="status" id="status"><i class="dot" id="statusDot"></i><span id="statusText">连接中…</span></span>
+  <span class="grow"></span>
+  <button class="iconbtn" id="shareBtn" title="显示手机访问地址和二维码">手机打开</button>
+</header>
+
+<main>
+  <div class="banner" id="remoteBanner">
+    <span>另一台设备刚更新了文本，是否加载到编辑框？</span>
+    <button id="remoteLoad">加载</button>
+  </div>
+
+  <!-- ================= 文本区 ================= -->
+  <section class="card editor drop" id="editorCard">
+    <div class="bar">
+      <b style="color:var(--text);font-size:12.5px">文本</b>
+      <span id="meta">空</span>
+      <span class="grow"></span>
+      <span id="syncInfo">未同步</span>
+    </div>
+    <textarea id="editor" placeholder="在这里输入或粘贴文本，停止输入会自动同步给另一台设备（图片请用下面的图片区上传）"
+      spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+    <div class="bar bottom">
+      <label class="switch" title="关闭后只有点「同步」才会发送">
+        <input type="checkbox" id="autoPush" checked>
+        <span></span>
+      </label>
+      <span class="swtext">自动发送（停止输入约 0.8 秒）</span>
+      <span class="grow"></span>
+      <button class="iconbtn" id="clearTextBtn" title="清空两台设备上的文本（立即生效）">清空文本</button>
+    </div>
+  </section>
+
+  <div class="actions">
+    <button class="big" id="copyBtn" title="把文本复制到本机剪贴板">
+      复制<small>文本到本机剪贴板</small>
+    </button>
+    <button class="big primary" id="syncBtn" title="把编辑框内容同步到另一台设备">
+      同步<small>手动发送到另一台</small>
+    </button>
+  </div>
+
+  <!-- ================= 图片区 ================= -->
+  <section class="card drop" id="imageCard" style="padding:10px 12px;display:flex;flex-direction:column;gap:10px">
+    <div class="bar" style="border:0;padding:0">
+      <b style="color:var(--text);font-size:12.5px">图片</b>
+      <span id="itemCount"></span>
+      <span class="grow"></span>
+      <button class="iconbtn filebtn" id="pickBtn">选择图片
+        <input type="file" id="fileInput" accept="image/*" multiple>
+      </button>
+      <button class="iconbtn" id="clearImagesBtn" title="清空两台设备上的图片（立即生效）">清空图片</button>
+    </div>
+    <div class="grid" id="items"></div>
+    <div class="emptyhint" id="emptyImages">
+      还没有图片。点「选择图片」上传，或把图片拖进来 / 在这里粘贴图片（Ctrl+V）。
+    </div>
+    <div class="pathsline" id="pathsLine"></div>
+  </section>
+
+  <!-- ================= 文件区（逻辑与图片区一致） ================= -->
+  <section class="card drop" id="fileCard" style="padding:10px 12px;display:flex;flex-direction:column;gap:10px">
+    <div class="bar" style="border:0;padding:0">
+      <b style="color:var(--text);font-size:12.5px">文件</b>
+      <span id="fileCount"></span>
+      <span class="grow"></span>
+      <button class="iconbtn filebtn" id="pickFileBtn">选择文件
+        <input type="file" id="fileInputAny" multiple>
+      </button>
+      <button class="iconbtn" id="clearFilesBtn" title="清空两台设备上的文件（立即生效）">清空文件</button>
+    </div>
+    <div class="filelist" id="fileItems"></div>
+    <div class="emptyhint" id="emptyFiles">
+      还没有文件。点「选择文件」上传，或把文件拖进来（不限类型、不限制大小，可多选）。
+    </div>
+  </section>
+</main>
+
+<footer id="footer">同一 Wi-Fi 下手机与电脑互通 · 内容只在内存中，服务重启即清空</footer>
+<div class="toast" id="toast"></div>
+
+<dialog id="qrDialog">
+  <h3 style="margin:0 0 4px;font-size:15px">用手机扫这个码</h3>
+  <p style="margin:0 0 10px">手机需与电脑连同一个 Wi-Fi</p>
+  <img id="qrImg" alt="扫码打开 ClipBridge">
+  <p id="qrUrl"></p>
+  <p id="qrHint" style="color:var(--muted)"></p>
+  <button class="iconbtn close" id="qrClose">关闭</button>
+</dialog>
+
+<dialog id="viewDialog">
+  <img id="viewImg" alt="图片预览">
+  <div class="viewbar">
+    <span id="viewName" style="font-size:12px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+    <a class="iconbtn" id="viewDownload" download>保存图片</a>
+    <button class="iconbtn" id="viewClose">关闭</button>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  'use strict';
+
+  const token = new URLSearchParams(location.search).get('k');
+  const api = (pathname, init) => {
+    const url = new URL(pathname, location.origin);
+    if (token) url.searchParams.set('k', token);
+    return fetch(url, init);
+  };
+  const asset = (pathname) => {
+    const url = new URL(pathname, location.origin);
+    if (token) url.searchParams.set('k', token);
+    return url.pathname + url.search;
+  };
+
+  const el = (id) => document.getElementById(id);
+  const MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
+  let version = -1;
+  let remote = { version: -1, items: [], text: '' };
+  let dirty = false;          // 编辑框有未同步的本地修改
+  let lastCopied = null;
+  let pushTimer = null;
+  let pollTimer = null;
+  let failures = 0;
+
+  // ------------------------------------------------ 小工具
+
+  function toast(message, ms) {
+    const node = el('toast');
+    node.textContent = message;
+    node.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => node.classList.remove('show'), ms || 2200);
+  }
+
+  function setStatus(state, text) {
+    el('statusDot').className = 'dot' + (state === 'on' ? ' on' : state === 'off' ? ' off' : '');
+    el('statusText').textContent = text;
+  }
+
+  function formatBytes(bytes) {
+    if (bytes === undefined || bytes === null) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+  }
+
+  function timeAgo(iso) {
+    const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+    if (seconds < 5) return '刚刚';
+    if (seconds < 60) return seconds + ' 秒前';
+    if (seconds < 3600) return Math.round(seconds / 60) + ' 分钟前';
+    return Math.round(seconds / 3600) + ' 小时前';
+  }
+
+  function sourceLabel(source) {
+    return {
+      phone: '手机', pc: '电脑', web: '网页', auto: '自动', manual: '手动', paste: '粘贴',
+      'pc-clipboard': '电脑剪贴板', cli: '命令行', welcome: '初始', upload: '手机上传', drop: '拖入',
+    }[source] || (source || '未知');
+  }
+
+  function updateMeta() {
+    const value = el('editor').value;
+    el('meta').textContent = value.length
+      ? value.length + ' 字 / ' + formatBytes(new TextEncoder().encode(value).length)
+      : '空';
+    // 「清空文本」要跟着编辑框内容实时亮灭：
+    // 只看本地编辑框，粘贴/打字后立刻亮起（不必等服务端状态回来）
+    el('clearTextBtn').disabled = value.length === 0;
+  }
+
+  function setSyncState(text, isError) {
+    el('syncInfo').textContent = text;
+    el('syncInfo').style.color = isError ? 'var(--err)' : '';
+  }
+
+  // ------------------------------------------------ 本机剪贴板（只写，不读）
+
+  async function copyTextToClipboard(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        try { await navigator.clipboard.writeText(text); return true; } catch (error) { /* 兜底 */ }
+      }
+      const helper = document.createElement('textarea');
+      helper.value = text;
+      helper.setAttribute('readonly', '');
+      helper.style.position = 'fixed';
+      helper.style.top = '0';
+      helper.style.opacity = '0';
+      document.body.appendChild(helper);
+      helper.select();
+      helper.setSelectionRange(0, helper.value.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(helper);
+      return ok;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // ------------------------------------------------ 服务端交互
+
+  let inFlight = false;
+  async function fetchState(since) {
+    const query = since === undefined || since === null ? '' : '?since=' + since;
+    const response = await api('/api/state' + query, { cache: 'no-store' });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return response.json();
+  }
+
+  /** 自动发送 / 手动同步都走这里；replaceText 只更新文本区，图片区完全不受影响。 */
+  async function pushText(text, source) {
+    const response = await api('/api/text', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        source: source || (MOBILE ? 'phone' : 'pc'),
+        replaceText: true,
+      }),
+    });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      throw new Error(detail.error || 'HTTP ' + response.status);
+    }
+    return response.json();
+  }
+
+  async function uploadImage(file, source) {
+    const response = await api('/api/image?name=' + encodeURIComponent(file.name || 'image') +
+      '&type=' + encodeURIComponent(source || 'phone'), {
+      method: 'POST',
+      headers: { 'content-type': file.type || 'application/octet-stream' },
+      body: file,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'HTTP ' + response.status);
+    return data;
+  }
+
+  /** 上传普通文件（与图片上传同构：二进制 body + 文件名放 query） */
+  async function uploadAnyFile(file, source) {
+    const response = await api('/api/file?name=' + encodeURIComponent(file.name || 'file') +
+      '&type=' + encodeURIComponent(source || 'phone'), {
+      method: 'POST',
+      headers: { 'content-type': file.type || 'application/octet-stream' },
+      body: file,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'HTTP ' + response.status);
+    return data;
+  }
+
+  // ------------------------------------------------ 渲染
+
+  /** 图片区：缩略图网格（图片全部保留，一行可放多个）。与文本区互不影响。 */
+  function renderItems(state) {
+    const container = el('items');
+    container.textContent = '';
+    const images = (state.items || []).filter((item) => item.kind === 'image');
+
+    el('emptyImages').style.display = images.length ? 'none' : '';
+    el('itemCount').textContent = images.length ? '（' + images.length + ' 张）' : '';
+    el('clearImagesBtn').disabled = images.length === 0;
+
+    const paths = [];
+    for (const item of images.slice().reverse()) {
+      container.appendChild(renderThumb(item));
+      if (item.paths && item.paths.length) paths.push(...item.paths);
+    }
+    el('pathsLine').textContent = paths.length ? '电脑上的路径：' + paths.join('  |  ') : '';
+  }
+
+  /** 缩略图：图片预览 + 半透明文件名/大小 + 直接下载 / 删除。 */
+  function renderThumb(item) {
+    const cell = document.createElement('div');
+    cell.className = 'thumb';
+    cell.title = `${item.name || '图片'} · ${formatBytes(item.bytes)} · ${sourceLabel(item.source)} · ${timeAgo(item.at)}`;
+
+    const img = document.createElement('img');
+    img.src = asset(item.url);
+    img.alt = item.name || '图片';
+    img.loading = 'lazy';
+    cell.appendChild(img);
+
+    // 文件名 + 大小（与点开的大图信息一致）
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    const fileName = document.createElement('span');
+    fileName.className = 'fname';
+    fileName.textContent = item.name || '图片';
+    const fileSize = document.createElement('span');
+    fileSize.className = 'fsize';
+    fileSize.textContent = formatBytes(item.bytes);
+    overlay.appendChild(fileName);
+    overlay.appendChild(fileSize);
+    cell.appendChild(overlay);
+
+    // 直接下载（缩略图上就能存，不用点开大图）
+    const download = document.createElement('a');
+    download.className = 'act dl';
+    download.href = asset(item.url);
+    download.setAttribute('download', item.name || 'image.png');
+    download.textContent = '⤓';
+    download.title = '保存这张图片';
+    download.addEventListener('click', (event) => event.stopPropagation());
+    cell.appendChild(download);
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'act rm';
+    del.textContent = '×';
+    del.title = '删除这张图片';
+    del.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      try {
+        await api('/api/items/' + encodeURIComponent(item.id), { method: 'DELETE' });
+        toast('已删除');
+        await refresh(true);
+      } catch (error) {
+        toast('删除失败：' + error.message, 3000);
+      }
+    });
+    cell.appendChild(del);
+
+    cell.addEventListener('click', () => openViewer(item));
+    return cell;
+  }
+
+  /** 文件区：一行一个（文件名 + 大小 + 类型 + 下载/删除），与图片区、文本区互不影响。 */
+  function renderFiles(state) {
+    const container = el('fileItems');
+    container.textContent = '';
+    const list = (state.items || []).filter((item) => item.kind === 'file');
+
+    el('emptyFiles').style.display = list.length ? 'none' : '';
+    el('fileCount').textContent = list.length ? '（' + list.length + ' 个）' : '';
+    el('clearFilesBtn').disabled = list.length === 0;
+
+    for (const item of list.slice().reverse()) container.appendChild(renderFileRow(item));
+  }
+
+  function renderFileRow(item) {
+    const row = document.createElement('div');
+    row.className = 'filerow';
+    row.title = `${item.name} · ${formatBytes(item.bytes)} · ${sourceLabel(item.source)} · ${timeAgo(item.at)}`;
+
+    const icon = document.createElement('div');
+    icon.className = 'ficon';
+    icon.textContent = (item.ext || 'FILE').slice(0, 4);
+    row.appendChild(icon);
+
+    const meta = document.createElement('div');
+    meta.className = 'fmeta';
+    const name = document.createElement('span');
+    name.className = 'fname2';
+    name.textContent = item.name || '文件';
+    const sub = document.createElement('span');
+    sub.className = 'fsub';
+    sub.textContent = `${formatBytes(item.bytes)} · ${sourceLabel(item.source)} · ${timeAgo(item.at)}`;
+    meta.appendChild(name);
+    meta.appendChild(sub);
+    row.appendChild(meta);
+
+    const buttons = document.createElement('div');
+    buttons.className = 'fbtns';
+    const download = document.createElement('a');
+    download.href = asset(item.downloadUrl || item.url);
+    download.setAttribute('download', item.name || 'file');
+    download.textContent = '下载';
+    buttons.appendChild(download);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = '删除';
+    del.addEventListener('click', async () => {
+      try {
+        await api('/api/items/' + encodeURIComponent(item.id), { method: 'DELETE' });
+        toast('已删除');
+        await refresh(true);
+      } catch (error) {
+        toast('删除失败：' + error.message, 3000);
+      }
+    });
+    buttons.appendChild(del);
+    row.appendChild(buttons);
+
+    return row;
+  }
+
+  function openViewer(item) {
+    el('viewImg').src = asset(item.url);
+    el('viewName').textContent = `${item.name || '图片'} · ${formatBytes(item.bytes)}` +
+      (item.width && item.height ? ` · ${item.width}×${item.height}` : '');
+    el('viewDownload').href = asset(item.url);
+    el('viewDownload').setAttribute('download', item.name || 'image.png');
+    el('viewDialog').showModal();
+  }
+
+  function applyState(state, force) {
+    const previousVersion = remote.version;
+    remote = state;
+    if (force || !dirty) {
+      const text = state.text || '';
+      if (el('editor').value !== text) el('editor').value = text;
+      version = state.version;
+      dirty = false;
+      el('remoteBanner').classList.remove('show');
+      setSyncState(state.updatedAt ? '已同步 ' + timeAgo(state.updatedAt) : '已同步');
+    } else if (state.version !== previousVersion) {
+      el('remoteBanner').classList.add('show');
+      setSyncState('另一台设备有更新（点上方「加载」）');
+    }
+    renderItems(state);
+    renderFiles(state);
+    // 清空按钮的最终状态以编辑框内容为准（多设备同步时也正确）
+    updateMeta();
+  }
+
+  async function refresh(force) {
+    try {
+      const state = await fetchState(force ? undefined : (remote.version >= 0 ? remote.version : undefined));
+      failures = 0;
+      setStatus('on', '已连接');
+      if (state.unchanged) return;
+      applyState(state, Boolean(force));
+    } catch (error) {
+      failures += 1;
+      if (failures >= 2) setStatus('off', '连接断开');
+    }
+  }
+
+  async function poll() {
+    if (inFlight || document.hidden) return;
+    inFlight = true;
+    try {
+      await refresh(false);
+    } finally {
+      inFlight = false;
+    }
+  }
+
+  // ------------------------------------------------ 操作
+
+  const editor = el('editor');
+
+  /** 自动发送（默认开启，停止输入约 0.8 秒）与手动同步共用 */
+  async function doSync(source) {
+    const text = editor.value;
+    try {
+      setSyncState('同步中…');
+      const result = await pushText(text, source);
+      version = result.version;
+      remote.version = result.version;
+      remote.text = result.text;
+      lastCopied = text;
+      dirty = false;
+      el('remoteBanner').classList.remove('show');
+      updateMeta();
+      setSyncState('已同步 ' + timeAgo(result.item ? result.item.at : new Date().toISOString()));
+      if (source === 'manual') toast('已同步：另一台设备现在能看到这段文本');
+    } catch (error) {
+      setSyncState('同步失败：' + error.message, true);
+      toast('同步失败：' + error.message, 3000);
+    }
+  }
+
+  /** 复制：把文本区的文本写入本机剪贴板 */
+  async function doCopy() {
+    try {
+      const state = await fetchState();
+      if (!state.unchanged) applyState(state, false);
+      const text = (state.unchanged ? remote.text : state.text) || editor.value;
+      if (!text) {
+        toast('文本区是空的，没有可复制的内容');
+        return;
+      }
+      const ok = await copyTextToClipboard(text);
+      if (ok) {
+        lastCopied = text;
+        toast(text.length > 30 ? '已复制 ' + text.length + ' 字到本机剪贴板' : '已复制：' + text);
+        return;
+      }
+      toast('复制被浏览器拦截，请长按编辑框手动全选复制', 3200);
+    } catch (error) {
+      toast('复制失败：' + error.message, 3000);
+    }
+  }
+
+  /** 清空文本区（图片区不受影响） */
+  async function doClearText() {
+    try {
+      await pushText('', 'manual');
+      editor.value = '';
+      dirty = false;
+      updateMeta();
+      setSyncState('文本已清空');
+      toast('文本已清空（另一台设备同步清空）');
+    } catch (error) {
+      toast('清空文本失败：' + error.message, 3000);
+    }
+  }
+
+  /** 清空图片区（文本区不受影响） */
+  async function doClearImages() {
+    const images = (remote.items || []).filter((item) => item.kind === 'image');
+    if (!images.length) {
+      toast('图片区已经是空的');
+      return;
+    }
+    try {
+      for (const item of images) {
+        await api('/api/items/' + encodeURIComponent(item.id), { method: 'DELETE' });
+      }
+      await refresh(true);
+      toast('图片已清空');
+    } catch (error) {
+      toast('清空图片失败：' + error.message, 3000);
+    }
+  }
+
+  async function uploadFiles(filesInput, source) {
+    const all = Array.from(filesInput || []);
+    // 图片走图片区，其它类型一律走文件区（拖入混合内容也能自动分流）
+    const images = all.filter((file) => file && file.type.startsWith('image/'));
+    const others = all.filter((file) => file && !file.type.startsWith('image/'));
+    if (!images.length && !others.length) {
+      toast('没有识别到可上传的文件');
+      return;
+    }
+
+    let imgDone = 0;
+    for (const file of images) {
+      try {
+        await uploadImage(file, source);
+        imgDone += 1;
+      } catch (error) {
+        toast('「' + (file.name || '图片') + '」上传失败：' + error.message, 3400);
+      }
+    }
+    let fileDone = 0;
+    for (const file of others) {
+      try {
+        await uploadAnyFile(file, source);
+        fileDone += 1;
+      } catch (error) {
+        toast('「' + (file.name || '文件') + '」上传失败：' + error.message, 3400);
+      }
+    }
+
+    el('fileInput').value = '';
+    el('fileInputAny').value = '';
+    await refresh(true);
+    if (imgDone) {
+      const total = (remote.items || []).filter((item) => item.kind === 'image').length;
+      toast(`已上传 ${imgDone} 张图片，图片区现在共 ${total} 张（不会覆盖之前的）`, 3000);
+    }
+    if (fileDone) {
+      const total = (remote.items || []).filter((item) => item.kind === 'file').length;
+      toast(`已上传 ${fileDone} 个文件，文件区现在共 ${total} 个（另一台设备可下载）`, 3000);
+    }  }
+
+  /** 清空文件区（文本区、图片区不受影响） */
+  async function doClearFiles() {
+    const list = (remote.items || []).filter((item) => item.kind === 'file');
+    if (!list.length) {
+      toast('文件区已经是空的');
+      return;
+    }
+    try {
+      for (const item of list) {
+        await api('/api/items/' + encodeURIComponent(item.id), { method: 'DELETE' });
+      }
+      await refresh(true);
+      toast('文件已清空');
+    } catch (error) {
+      toast('清空文件失败：' + error.message, 3000);
+    }
+  }
+
+  // ------------------------------------------------ 事件绑定
+
+  el('copyBtn').addEventListener('click', () => { void doCopy(); });
+  el('syncBtn').addEventListener('click', () => { void doSync('manual'); });
+  el('clearTextBtn').addEventListener('click', () => { void doClearText(); });
+  el('clearImagesBtn').addEventListener('click', () => { void doClearImages(); });
+  el('fileInput').addEventListener('change', (event) => { void uploadFiles(event.target.files, 'phone'); });
+  el('fileInputAny').addEventListener('change', (event) => { void uploadFiles(event.target.files, 'phone'); });
+  el('clearFilesBtn').addEventListener('click', () => { void doClearFiles(); });
+  el('viewClose').addEventListener('click', () => el('viewDialog').close());
+  el('remoteLoad').addEventListener('click', async () => {
+    await refresh(true);
+    el('remoteBanner').classList.remove('show');
+  });
+
+  // 编辑框：本地修改标记 + 自动发送（停止输入约 0.8 秒后发送一次）
+  function scheduleAutoSync() {
+    if (!el('autoPush').checked) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => { void doSync('auto'); }, 800);
+  }
+
+  editor.addEventListener('input', () => {
+    dirty = true;
+    updateMeta();               // 立刻刷新「清空文本」的可用状态
+    setSyncState('未同步（停止输入会自动发送）');
+    scheduleAutoSync();
+  });
+  editor.addEventListener('paste', () => {
+    dirty = true;
+    updateMeta();
+    scheduleAutoSync();
+  });
+
+  // 拖入 / 页面粘贴：文本卡片、图片卡片、文件卡片都接受；图片自动进图片区，其余进文件区
+  const dropTargets = [el('editorCard'), el('imageCard'), el('fileCard')];
+  for (const target of dropTargets) {
+    ['dragenter', 'dragover'].forEach((type) => {
+      target.addEventListener(type, (event) => {
+        event.preventDefault();
+        target.classList.add('over');
+      });
+    });
+    ['dragleave', 'drop'].forEach((type) => {
+      target.addEventListener(type, (event) => {
+        event.preventDefault();
+        target.classList.remove('over');
+      });
+    });
+    target.addEventListener('drop', (event) => {
+      const files = event.dataTransfer ? Array.from(event.dataTransfer.files || []) : [];
+      if (files.length) void uploadFiles(files, 'drop');
+    });
+  }
+  document.addEventListener('paste', (event) => {
+    if (event.target === editor) return;
+    const files = event.clipboardData ? Array.from(event.clipboardData.files || []) : [];
+    const images = files.filter((file) => file.type.startsWith('image/'));
+    if (images.length) {
+      event.preventDefault();
+      void uploadFiles(images, 'paste');
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      void doSync('manual');
+    }
+  });
+
+  // 二维码弹窗
+  const qrDialog = el('qrDialog');
+  async function openShareDialog() {
+    let url = location.origin + '/' + (token ? '?k=' + encodeURIComponent(token) : '');
+    let hint = '';
+    try {
+      const info = await api('/api/info').then((r) => r.json());
+      const lan = (info.addresses || []).find((address) => address && !address.startsWith('127.'));
+      const isLoopback = /^(127\.|localhost)/.test(location.hostname);
+      if (isLoopback && lan) {
+        url = 'http://' + lan + ':' + info.port + '/' + (token ? '?k=' + encodeURIComponent(token) : '');
+        hint = '当前是电脑本机地址，下面是手机可用的局域网地址';
+      } else {
+        hint = '电脑浏览器请打开 http://127.0.0.1:' + info.port + '/';
+      }
+    } catch (error) { /* 用当前地址兜底 */ }
+    el('qrImg').src = '/api/qr.png?u=' + encodeURIComponent(url) + '&s=6' + (token ? '&k=' + encodeURIComponent(token) : '');
+    el('qrUrl').textContent = url;
+    el('qrHint').textContent = hint;
+    qrDialog.showModal();
+  }
+  el('shareBtn').addEventListener('click', () => { void openShareDialog(); });
+  el('qrClose').addEventListener('click', () => qrDialog.close());
+
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) void poll(); });
+  window.addEventListener('online', () => { void poll(); });
+
+  // 初始化
+  el('footer').textContent = MOBILE
+    ? '手机端：文本停止输入会自动同步；图片和文件用「选择图片 / 选择文件」上传（可多选）'
+    : '电脑端：文本在这里输入会自动同步给手机；图片、文件用按钮上传或直接拖进来';
+  updateMeta();
+  (async () => {
+    try {
+      const info = await api('/api/info').then((r) => r.json());
+      document.title = 'ClipBridge · ' + (info.addresses[0] || 'localhost') + ':' + info.port;
+    } catch (error) { /* 忽略 */ }
+    await refresh(true);
+    pollTimer = setInterval(poll, 2000);
+  })();
+})();
+</script>
+</body>
+</html>

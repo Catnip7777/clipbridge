@@ -1,0 +1,38 @@
+{
+  "name": "clipbridge",
+  "version": "1.2.0",
+  "private": true,
+  "description": "手机与电脑之间互相传输文本/图片的局域网剪贴桥，零第三方依赖",
+  "main": "server.js",
+  "bin": {
+    "clipbridge": "start.js"
+  },
+  "scripts": {
+    "start": "node start.js",
+    "serve": "node server.js",
+    "start:open": "node start.js --open",
+    "check": "node start.js --check",
+    "selftest": "node start.js --test",
+    "send": "node server.js send",
+    "pull": "node server.js pull",
+    "watch": "node server.js clip",
+    "test": "node selftest.js && node server.test.js && node scripts/ui-check.js && node scripts/check-layout.js && node scripts/check-thumb.js && node scripts/check-clear-button.js && node scripts/check-start.js && node scripts/check-cmd.js",
+    "test:qr": "node selftest.js",
+    "test:server": "node server.test.js",
+    "test:ui": "node scripts/ui-check.js",
+    "test:layout": "node scripts/check-layout.js",
+    "test:thumb": "node scripts/check-thumb.js",
+    "test:button": "node scripts/check-clear-button.js",
+    "test:start": "node scripts/check-start.js",
+    "test:cmd": "node scripts/check-cmd.js",
+    "test:startup": "node scripts/check-startup.js",
+    "test:live": "node scripts/check-live.js",
+    "test:final": "node scripts/check-final.js",
+    "test:e2e": "node scripts/e2e.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["clipboard", "lan", "phone", "pc", "text", "image", "qrcode"],
+  "license": "MIT"
+}
